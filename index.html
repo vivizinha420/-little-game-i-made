@@ -1,361 +1,427 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Jogos Arcade</title>
+  <title>Pac-Man</title>
   <style>
-    :root {
-      --primary-color: #00d4ff;
-      --bg-gradient: linear-gradient(135deg, #020024, #090979, var(--primary-color));
-      --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    }
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
     body {
-      font-family: var(--font-family);
-      background: var(--bg-gradient);
-      color: white;
-      overflow: hidden;
-      user-select: none;
+      margin: 0;
+      background: black;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
       height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
+      overflow: hidden;
+      color: white;
+      font-family: Arial, sans-serif;
     }
-    canvas {
-      display: block;
+
+    #game {
+      position: relative;
+      width: 504px;
+      height: 504px;
+      background: #222;
+      display: grid;
+      grid-template-columns: repeat(24, 20px);
+      grid-template-rows: repeat(24, 20px);
+      gap: 2px;
+      margin-bottom: 20px;
+    }
+
+    .cell {
+      width: 20px;
+      height: 20px;
       background: #111;
-      border-radius: 10px;
-      box-shadow: 0 0 20px var(--primary-color);
-      border: 3px solid var(--primary-color);
-      max-width: 100%;
-      height: auto;
+      border-radius: 3px;
+      position: relative;
     }
-    #hud, #recorde, #jogoAtual {
-      position: fixed;
-      left: 15px;
-      text-shadow: 0 0 10px var(--primary-color);
-      user-select: none;
+
+    .wall { background: blue; }
+    .pacman {
+      border-radius: 50%;
       z-index: 10;
-      font-weight: bold;
-      pointer-events: none;
+      transition: background 0.2s ease;
     }
-    #hud {
-      top: 10px;
-      font-size: 20px;
+    .pacman.powered { background: orange !important; }
+
+    .dot {
+      position: absolute;
+      top: 7px;
+      left: 7px;
+      width: 6px;
+      height: 6px;
+      background: white;
+      border-radius: 50%;
     }
-    #recorde {
-      top: 40px;
-      font-size: 15px;
-      opacity: 0.75;
+
+    .fruit {
+      position: absolute;
+      top: 5px;
+      left: 5px;
+      width: 10px;
+      height: 10px;
+      background: orange;
+      border-radius: 50%;
+      z-index: 8;
+      box-shadow: 0 0 5px #ff6600;
     }
-    #jogoAtual {
-      right: 15px;
-      top: 10px;
-      font-size: 14px;
-      opacity: 0.7;
-      left: auto;
+
+    .ghost {
+      width: 20px;
+      height: 20px;
+      position: relative;
+      z-index: 9;
     }
-    #menu {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.85);
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      gap: 20px;
-      font-size: 26px;
-      color: var(--primary-color);
-      z-index: 20;
-      transition: opacity 0.3s ease;
+
+    .ghost img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
     }
+
+    .ghost.vulnerable img {
+      filter: hue-rotate(180deg) brightness(0.7);
+    }
+
+    #status {
+      font-size: 1.2rem;
+      height: 1.5em;
+      margin-bottom: 5px;
+    }
+
+    #score {
+      font-size: 1.1rem;
+      margin-bottom: 10px;
+    }
+
+    #colorMenu {
+      margin-bottom: 10px;
+      font-size: 1rem;
+      color: white;
+    }
+
+    #colorSelect {
+      margin-left: 10px;
+      padding: 5px;
+      font-size: 1rem;
+      border-radius: 4px;
+      background: #222;
+      color: white;
+      border: 1px solid #555;
+    }
+
     button {
-      padding: 12px 30px;
-      font-size: 20px;
-      font-weight: bold;
-      color: #111;
-      background: var(--primary-color);
+      background: #444;
+      border: none;
+      color: white;
+      font-size: 1rem;
+      padding: 10px 20px;
+      margin: 0 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    button:hover { background: #666; }
+
+    #buttons {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    #touch-controls {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      margin-top: 10px;
+    }
+
+    #touch-controls .row {
+      display: flex;
+      justify-content: center;
+    }
+
+    .dir-btn {
+      background: #333;
+      color: white;
+      font-size: 1.5rem;
+      padding: 15px 20px;
+      margin: 5px;
       border: none;
       border-radius: 8px;
-      box-shadow: 0 0 10px var(--primary-color);
       cursor: pointer;
-      transition: background-color 0.3s, transform 0.15s;
-      user-select: none;
-      min-width: 200px;
     }
-    button:hover, button:focus {
-      background-color: #009ee0;
-      transform: scale(1.05);
-      outline: none;
+
+    .dir-btn:active {
+      background: #666;
+    }
+
+    @media (max-width: 768px) {
+      #touch-controls {
+        display: flex;
+      }
     }
   </style>
 </head>
 <body>
-  <div id="hud" aria-live="polite">Pontos: 0</div>
-  <div id="recorde" aria-live="polite">Recorde: 0</div>
-  <div id="jogoAtual" aria-live="polite"></div>
 
-  <div id="menu" role="dialog" aria-modal="true" aria-labelledby="menuTitle">
-    <div id="menuTitle" style="margin-bottom:10px;">🎮 Escolha um Jogo</div>
-    <button data-jogo="blocos">Desvie dos Blocos</button>
-    <button data-jogo="nave">Jogo da Nave</button>
+<div id="game"></div>
+<div id="score">Pontuação: 0</div>
+<div id="status"></div>
+
+<div id="colorMenu">
+  <label for="colorSelect">Cor do Pac-Man:</label>
+  <select id="colorSelect">
+    <option value="yellow" selected>Amarelo</option>
+    <option value="green">Verde</option>
+    <option value="blue">Azul</option>
+    <option value="red">Vermelho</option>
+    <option value="pink">Rosa</option>
+  </select>
+</div>
+
+<div id="buttons">
+  <button id="startBtn">Jogar</button>
+  <button id="speedBtn" style="display:none;">Acelerar Fantasmas</button>
+  <button id="restartBtn" style="display:none;">Reiniciar</button>
+</div>
+
+<div id="touch-controls">
+  <div class="row">
+    <button class="dir-btn" data-dir="up">⬆️</button>
   </div>
+  <div class="row">
+    <button class="dir-btn" data-dir="left">⬅️</button>
+    <button class="dir-btn" data-dir="down">⬇️</button>
+    <button class="dir-btn" data-dir="right">➡️</button>
+  </div>
+</div>
 
-  <canvas id="gameCanvas" width="400" height="600" aria-label="Área do jogo"></canvas>
+<script>
+const width = 24;
+let layout = [], cells = [], pacmanPosition, ghosts = [];
+let gameOver = false, ghostInterval, score = 0, ghostSpeed = 500;
+let poweredUp = false, powerTimeout;
+let pacmanColor = 'yellow';
 
-  <script>
-    (() => {
-      const canvas = document.getElementById('gameCanvas');
-      const ctx = canvas.getContext('2d');
-      const hud = document.getElementById('hud');
-      const recordeDiv = document.getElementById('recorde');
-      const menu = document.getElementById('menu');
-      const jogoAtualSpan = document.getElementById('jogoAtual');
-      const buttons = menu.querySelectorAll('button');
+const game = document.getElementById('game');
+const status = document.getElementById('status');
+const scoreDisplay = document.getElementById('score');
+const startBtn = document.getElementById('startBtn');
+const restartBtn = document.getElementById('restartBtn');
+const speedBtn = document.getElementById('speedBtn');
+const colorSelect = document.getElementById('colorSelect');
 
-      const largura = canvas.width;
-      const altura = canvas.height;
+colorSelect.addEventListener('change', () => {
+  pacmanColor = colorSelect.value;
+  drawPacman();
+});
 
-      let teclas = {};
-      let jogoAtual = null;
-      let ultimoTimestamp = 0;
-      let animFrameId = null;
+const fruitPositions = [3*width+3, 3*width+20, 20*width+3, 20*width+20, 12*width+12];
 
-      // Recordes salvos no localStorage
-      const recordes = {
-        blocos: parseInt(localStorage.getItem('recorde_blocos')) || 0,
-        nave: parseInt(localStorage.getItem('recorde_nave')) || 0
-      };
+function createLayout() {
+  layout = [];
+  for(let i=0;i<width*width;i++){
+    const row = Math.floor(i/width), col = i%width;
+    layout.push((row===0||row===width-1||col===0||col===width-1) ? 1 : 2);
+  }
+  [6,12,18].forEach(r=>{ for(let c=2;c<width-2;c++){ layout[r*width+c]=1; } });
+  [6,12,18].forEach(c=>{ for(let r=2;r<width-2;r++){ layout[r*width+c]=1; } });
+  layout[1*width+1]=0; layout[1*width+2]=0;
+  fruitPositions.forEach(pos=>layout[pos]=3);
+}
 
-      // Setup áudio (com tratamento para suspensão)
-      let audioCtx;
-      try {
-        const AudioContext = window.AudioContext || window.webkitAudioContext;
-        audioCtx = new AudioContext();
-      } catch {}
+function createGrid(){
+  game.innerHTML=''; cells=[];
+  layout.forEach(value=>{
+    const cell = document.createElement('div'); cell.classList.add('cell');
+    if(value===1) cell.classList.add('wall');
+    if(value===2){ const dot=document.createElement('div'); dot.classList.add('dot'); cell.appendChild(dot); }
+    if(value===3){ const fruit=document.createElement('div'); fruit.classList.add('fruit'); cell.appendChild(fruit); }
+    game.appendChild(cell); cells.push(cell);
+  });
+}
 
-      function playSound(freq, duration = 0.1, volume = 0.2) {
-        if (!audioCtx) return;
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-        const oscillator = audioCtx.createOscillator();
-        const gainNode = audioCtx.createGain();
-        oscillator.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-        oscillator.type = 'square';
-        oscillator.frequency.value = freq;
-        gainNode.gain.value = volume;
-        oscillator.start();
-        oscillator.stop(audioCtx.currentTime + duration);
+function drawPacman(){
+  const cell = cells[pacmanPosition];
+  cell.classList.add('pacman');
+  cell.style.backgroundColor = poweredUp ? 'orange' : pacmanColor;
+}
+
+function removePacman(){
+  const cell = cells[pacmanPosition];
+  cell.classList.remove('pacman','powered');
+  cell.style.backgroundColor = '';
+}
+
+class Ghost {
+  constructor(startPos, colorClass, imgSrc){
+    this.startPos=startPos; this.position=startPos;
+    this.vulnerable=false; this.isDead=false;
+    this.element=document.createElement('div'); this.element.classList.add('ghost',colorClass);
+    this.img=document.createElement('img'); this.img.src=imgSrc; this.element.appendChild(this.img);
+    cells[this.position].appendChild(this.element);
+  }
+  move(){
+    if(this.isDead) return;
+    const directions=[-1,1,-width,width];
+    function manhattanDist(a,b){
+      const x1=a%width,y1=Math.floor(a/width),x2=b%width,y2=Math.floor(b/width);
+      return Math.abs(x1-x2)+Math.abs(y1-y2);
+    }
+    let validMoves=directions.filter(d=>{
+      const newPos=this.position+d;
+      return newPos>=0&&newPos<layout.length&&layout[newPos]!==1&&!ghosts.some(g=>g.position===newPos&&g!==this&&!g.isDead);
+    });
+    if(validMoves.length===0) return;
+    validMoves.sort((a,b)=>{
+      const distA=manhattanDist(this.position+a,pacmanPosition);
+      const distB=manhattanDist(this.position+b,pacmanPosition);
+      return this.vulnerable?distB-distA:distA-distB;
+    });
+    const bestMove=validMoves[0];
+    cells[this.position].removeChild(this.element);
+    this.position+=bestMove;
+    cells[this.position].appendChild(this.element);
+  }
+  makeVulnerable(){ this.vulnerable=true; this.element.classList.add('vulnerable'); }
+  makeNormal(){ this.vulnerable=false; this.element.classList.remove('vulnerable'); }
+  kill(){
+    this.isDead=true; this.makeNormal();
+    if(this.element.parentNode) this.element.parentNode.removeChild(this.element);
+    setTimeout(()=>{ this.isDead=false; this.position=this.startPos; cells[this.position].appendChild(this.element); },5000);
+  }
+  remove(){ if(this.element.parentNode) this.element.parentNode.removeChild(this.element); }
+}
+
+function startGhosts(){
+  stopGhosts();
+  ghostInterval=setInterval(()=>{
+    if(gameOver) return;
+    ghosts.forEach(ghost=>{
+      if(ghost.isDead) return;
+      ghost.move();
+      if(ghost.position===pacmanPosition){
+        if(poweredUp && ghost.vulnerable){ updateScore(100); ghost.kill(); }
+        else if(!poweredUp){ endGame('Você foi pego pelos fantasmas!'); }
       }
+    });
+  },ghostSpeed);
+}
 
-      // Função genérica para checar colisão AABB
-      function colide(a, b, aw = 0, ah = 0, bw = aw, bh = ah) {
-        return a.x < b.x + bw &&
-               a.x + aw > b.x &&
-               a.y < b.y + bh &&
-               a.y + ah > b.y;
-      }
+function stopGhosts(){ clearInterval(ghostInterval); }
 
-      // Função para atualizar display de pontos e recordes
-      function atualizarHUD(pontos, recorde) {
-        hud.textContent = `Pontos: ${pontos}`;
-        recordeDiv.textContent = `Recorde: ${recorde}`;
-      }
+function updateScore(points){ score+=points; scoreDisplay.textContent='Pontuação: '+score; }
 
-      // Define os dois jogos com suas lógicas
-      const jogos = {
-        blocos: {
-          nome: 'Desvie dos Blocos',
-          jogador: {},
-          inimigos: [],
-          pontos: 0,
-          intervalo: 800,
-          velocidade: 150,
-          tempo: 0,
-          resetar() {
-            this.jogador = { x: largura / 2 - 25, y: altura - 70, largura: 50, altura: 50, dx: 0, velocidade: 300 };
-            this.inimigos = [];
-            this.pontos = 0;
-            this.intervalo = 800;
-            this.velocidade = 150;
-            this.tempo = 0;
-            atualizarHUD(0, recordes.blocos);
-          },
-          atualizar(delta) {
-            this.jogador.dx = (teclas['ArrowLeft'] || teclas['a']) ? -this.jogador.velocidade :
-                              (teclas['ArrowRight'] || teclas['d']) ? this.jogador.velocidade : 0;
-            this.jogador.x += this.jogador.dx * delta;
-            this.jogador.x = Math.max(0, Math.min(largura - this.jogador.largura, this.jogador.x));
+function endGame(msg){
+  gameOver=true; stopGhosts(); status.textContent=msg;
+  restartBtn.style.display='inline-block'; speedBtn.style.display='none'; startBtn.style.display='none';
+}
 
-            this.tempo += delta * 1000;
-            if (this.tempo > this.intervalo) {
-              this.inimigos.push({ x: Math.random() * (largura - 50), y: -50 });
-              this.tempo = 0;
-            }
+function resetGame(){
+  gameOver=false; score=0; updateScore(0); status.textContent=''; poweredUp=false;
+  clearTimeout(powerTimeout); createLayout(); createGrid();
+  pacmanPosition=1*width+1; ghosts.forEach(g=>g.remove()); ghosts=[];
+  ghosts.push(new Ghost(22*width+22,'red','fan4.png'));
+  ghosts.push(new Ghost(22*width+1,'pink','fan3.png'));
+  ghosts.push(new Ghost(1*width+22,'cyan','fan2.png'));
+  ghosts.push(new Ghost(12*width+12,'orange','fan.png'));
+  drawPacman();
+  restartBtn.style.display='none'; speedBtn.style.display='inline-block'; startBtn.style.display='none';
+  startGhosts();
+}
 
-            for (let i = this.inimigos.length - 1; i >= 0; i--) {
-              const e = this.inimigos[i];
-              e.y += this.velocidade * delta;
+function movePacman(dir){
+  if(gameOver) return;
+  const newPos=pacmanPosition+dir;
+  if(newPos<0||newPos>=layout.length||layout[newPos]===1) return;
+  removePacman(); pacmanPosition=newPos;
 
-              if (colide(this.jogador, e, 50, 50)) return fimDeJogo();
+  if(layout[pacmanPosition]===2){ layout[pacmanPosition]=0; const dot=cells[pacmanPosition].querySelector('.dot'); if(dot) dot.remove(); updateScore(10); }
+  if(layout[pacmanPosition]===3){ layout[pacmanPosition]=0; const fruit=cells[pacmanPosition].querySelector('.fruit'); if(fruit) fruit.remove(); updateScore(50); activatePowerUp(); }
 
-              if (e.y > altura) {
-                this.inimigos.splice(i, 1);
-                this.pontos++;
-                atualizarHUD(this.pontos, recordes.blocos);
-                playSound(880, 0.05);
-                if (this.pontos % 5 === 0 && this.intervalo > 300) {
-                  this.intervalo -= 50;
-                  this.velocidade += 20;
-                }
-              }
-            }
-          },
-          desenhar() {
-            ctx.fillStyle = '#00d4ff';
-            ctx.fillRect(this.jogador.x, this.jogador.y, this.jogador.largura, this.jogador.altura);
-            ctx.fillStyle = 'red';
-            this.inimigos.forEach(e => ctx.fillRect(e.x, e.y, 50, 50));
-          },
-          getPontos() { return this.pontos; },
-          getRecordeKey() { return 'blocos'; }
-        },
-        nave: {
-          nome: 'Jogo da Nave',
-          nave: {},
-          tiros: [],
-          inimigos: [],
-          pontos: 0,
-          tempo: 0,
-          intervalo: 1000,
-          resetar() {
-            this.nave = { x: largura / 2 - 20, y: altura - 60, largura: 40, altura: 40, velocidade: 300 };
-            this.tiros = [];
-            this.inimigos = [];
-            this.pontos = 0;
-            this.tempo = 0;
-            this.intervalo = 1000;
-            atualizarHUD(0, recordes.nave);
-          },
-          atualizar(delta) {
-            if (teclas['ArrowLeft'] || teclas['a']) this.nave.x -= this.nave.velocidade * delta;
-            if (teclas['ArrowRight'] || teclas['d']) this.nave.x += this.nave.velocidade * delta;
-            this.nave.x = Math.max(0, Math.min(largura - this.nave.largura, this.nave.x));
+  drawPacman();
 
-            this.tempo += delta * 1000;
-            if (this.tempo > this.intervalo) {
-              this.inimigos.push({ x: Math.random() * (largura - 30), y: -30 });
-              this.tempo = 0;
-            }
+  ghosts.forEach(ghost=>{
+    if(ghost.position===pacmanPosition){
+      if(poweredUp && ghost.vulnerable){ updateScore(100); ghost.kill(); }
+      else if(!poweredUp){ endGame('Você foi pego pelos fantasmas!'); }
+    }
+  });
 
-            this.tiros.forEach(t => t.y -= 400 * delta);
-            this.tiros = this.tiros.filter(t => t.y > -10);
+  if(!layout.includes(2) && !layout.includes(3)){ endGame('Você ganhou! Parabéns!'); }
+}
 
-            for (let i = this.inimigos.length - 1; i >= 0; i--) {
-              const inimigo = this.inimigos[i];
-              inimigo.y += 150 * delta;
+function activatePowerUp(){
+  poweredUp=true; drawPacman(); ghosts.forEach(g=>{ if(!g.isDead) g.makeVulnerable(); });
+  if(powerTimeout) clearTimeout(powerTimeout);
+  powerTimeout=setTimeout(()=>{ poweredUp=false; drawPacman(); ghosts.forEach(g=>g.makeNormal()); },8000);
+}
 
-              // Checar colisão tiros x inimigos
-              for (let j = 0; j < this.tiros.length; j++) {
-                const tiro = this.tiros[j];
-                if (colide(tiro, inimigo, 5, 10, 30, 30)) {
-                  this.tiros.splice(j, 1);
-                  this.inimigos.splice(i, 1);
-                  this.pontos++;
-                  atualizarHUD(this.pontos, recordes.nave);
-                  playSound(600, 0.05);
-                  break;
-                }
-              }
+// --- Teclado ---
+document.addEventListener('keydown',e=>{
+  if(gameOver) return;
+  switch(e.key){
+    case 'ArrowUp': case 'w': case 'W': movePacman(-width); break;
+    case 'ArrowDown': case 's': case 'S': movePacman(width); break;
+    case 'ArrowLeft': case 'a': case 'A': movePacman(-1); break;
+    case 'ArrowRight': case 'd': case 'D': movePacman(1); break;
+  }
+});
 
-              if (colide(this.nave, inimigo, this.nave.largura, this.nave.altura, 30, 30)) return fimDeJogo();
-            }
-          },
-          desenhar() {
-            ctx.fillStyle = '#0ff';
-            ctx.fillRect(this.nave.x, this.nave.y, this.nave.largura, this.nave.altura);
-            ctx.fillStyle = '#fff';
-            this.tiros.forEach(t => ctx.fillRect(t.x, t.y, 5, 10));
-            ctx.fillStyle = 'orange';
-            this.inimigos.forEach(i => ctx.fillRect(i.x, i.y, 30, 30));
-          },
-          getPontos() { return this.pontos; },
-          getRecordeKey() { return 'nave'; }
-        }
-      };
+// --- Botões virtuais ---
+document.querySelectorAll('.dir-btn').forEach(btn => {
+  btn.addEventListener('touchstart', () => {
+    const dir = btn.dataset.dir;
+    if(dir === 'up') movePacman(-width);
+    if(dir === 'down') movePacman(width);
+    if(dir === 'left') movePacman(-1);
+    if(dir === 'right') movePacman(1);
+  });
+});
 
-      // Função para iniciar o jogo selecionado
-      function iniciarJogo(nome) {
-        jogoAtual = jogos[nome];
-        jogoAtual.resetar();
-        menu.style.display = 'none';
-        jogoAtualSpan.textContent = `🕹️ Jogo: ${jogoAtual.nome}`;
-        ultimoTimestamp = 0;
-        animFrameId = requestAnimationFrame(loop);
-      }
+// --- Swipe (arrastar com o dedo) ---
+let touchStartX = 0, touchStartY = 0;
+let touchEndX = 0, touchEndY = 0;
 
-      // Função que finaliza o jogo, atualiza recorde e exibe menu
-      function fimDeJogo() {
-        cancelAnimationFrame(animFrameId);
-        const key = jogoAtual.getRecordeKey();
-        const pontos = jogoAtual.getPontos();
-        if (pontos > recordes[key]) {
-          recordes[key] = pontos;
-          localStorage.setItem(`recorde_${key}`, pontos);
-        }
-        atualizarHUD(pontos, recordes[key]);
-        setTimeout(() => {
-          menu.style.display = 'flex';
-          jogoAtualSpan.textContent = '';
-          jogoAtual = null;
-        }, 500);
-      }
+function handleSwipe() {
+  const dx = touchEndX - touchStartX;
+  const dy = touchEndY - touchStartY;
 
-      // Loop principal do jogo
-      function loop(timestamp) {
-        if (!jogoAtual) return;
-        const delta = (timestamp - ultimoTimestamp) / 1000 || 0;
-        ultimoTimestamp = timestamp;
+  if (Math.abs(dx) > Math.abs(dy)) {
+    if (dx > 30) movePacman(1);      // direita
+    else if (dx < -30) movePacman(-1); // esquerda
+  } else {
+    if (dy > 30) movePacman(width);     // baixo
+    else if (dy < -30) movePacman(-width); // cima
+  }
+}
 
-        ctx.clearRect(0, 0, largura, altura);
-        jogoAtual.atualizar(delta);
-        jogoAtual.desenhar();
+document.addEventListener("touchstart", e => {
+  touchStartX = e.changedTouches[0].screenX;
+  touchStartY = e.changedTouches[0].screenY;
+}, false);
 
-        animFrameId = requestAnimationFrame(loop);
-      }
+document.addEventListener("touchend", e => {
+  touchEndX = e.changedTouches[0].screenX;
+  touchEndY = e.changedTouches[0].screenY;
+  handleSwipe();
+}, false);
 
-      // Eventos de teclado
-      window.addEventListener('keydown', e => {
-        if (!teclas[e.key]) {
-          teclas[e.key] = true;
-        }
-        if (audioCtx?.state === 'suspended') audioCtx.resume();
+startBtn.addEventListener('click', resetGame);
+restartBtn.addEventListener('click', resetGame);
+speedBtn.addEventListener('click', ()=>{
+  ghostSpeed=ghostSpeed===500?250:500;
+  speedBtn.textContent=ghostSpeed===500?'Acelerar Fantasmas':'Normalizar Velocidade';
+  startGhosts();
+});
+</script>
 
-        // Disparo de tiros no jogo da nave
-        if ((e.key === ' ' || e.key === 'Spacebar') && jogoAtual === jogos.nave) {
-          e.preventDefault();
-          jogoAtual.tiros.push({
-            x: jogoAtual.nave.x + jogoAtual.nave.largura / 2 - 2.5,
-            y: jogoAtual.nave.y
-          });
-          playSound(1200, 0.05);
-        }
-      });
-      window.addEventListener('keyup', e => teclas[e.key] = false);
-
-      // Botões do menu para iniciar jogo
-      buttons.forEach(btn => {
-        btn.addEventListener('click', () => iniciarJogo(btn.dataset.jogo));
-      });
-
-    })();
-  </script>
 </body>
 </html>
+
+
