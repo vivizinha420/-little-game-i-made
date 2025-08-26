@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Jogos Arcade</title>
+  <style>
+    :root {
+      --primary-color: #00d4ff;
+      --bg-gradient: linear-gradient(135deg, #020024, #090979, var(--primary-color));
+      --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: var(--font-family);
+      background: var(--bg-gradient);
+      color: white;
+      overflow: hidden;
+      user-select: none;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    canvas {
+      display: block;
+      background: #111;
+      border-radius: 10px;
+      box-shadow: 0 0 20px var(--primary-color);
+      border: 3px solid var(--primary-color);
+      max-width: 100%;
+      height: auto;
+    }
+    #hud, #recorde, #jogoAtual {
+      position: fixed;
+      left: 15px;
+      text-shadow: 0 0 10px var(--primary-color);
+      user-select: none;
+      z-index: 10;
+      font-weight: bold;
+      pointer-events: none;
+    }
+    #hud {
+      top: 10px;
+      font-size: 20px;
+    }
+    #recorde {
+      top: 40px;
+      font-size: 15px;
+      opacity: 0.75;
+    }
+    #jogoAtual {
+      right: 15px;
+      top: 10px;
+      font-size: 14px;
+      opacity: 0.7;
+      left: auto;
+    }
+    #menu {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.85);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 20px;
+      font-size: 26px;
+      color: var(--primary-color);
+      z-index: 20;
+      transition: opacity 0.3s ease;
+    }
+    button {
+      padding: 12px 30px;
+      font-size: 20px;
+      font-weight: bold;
+      color: #111;
+      background: var(--primary-color);
+      border: none;
+      border-radius: 8px;
+      box-shadow: 0 0 10px var(--primary-color);
+      cursor: pointer;
+      transition: background-color 0.3s, transform 0.15s;
+      user-select: none;
+      min-width: 200px;
+    }
+    button:hover, button:focus {
+      background-color: #009ee0;
+      transform: scale(1.05);
+      outline: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="hud" aria-live="polite">Pontos: 0</div>
+  <div id="recorde" aria-live="polite">Recorde: 0</div>
+  <div id="jogoAtual" aria-live="polite"></div>
+
+  <div id="menu" role="dialog" aria-modal="true" aria-labelledby="menuTitle">
+    <div id="menuTitle" style="margin-bottom:10px;">🎮 Escolha um Jogo</div>
+    <button data-jogo="blocos">Desvie dos Blocos</button>
+    <button data-jogo="nave">Jogo da Nave</button>
+  </div>
+
+  <canvas id="gameCanvas" width="400" height="600" aria-label="Área do jogo"></canvas>
+
+  <script>
+    (() => {
+      const canvas = document.getElementById('gameCanvas');
+      const ctx = canvas.getContext('2d');
+      const hud = document.getElementById('hud');
+      const recordeDiv = document.getElementById('recorde');
+      const menu = document.getElementById('menu');
+      const jogoAtualSpan = document.getElementById('jogoAtual');
+      const buttons = menu.querySelectorAll('button');
+
+      const largura = canvas.width;
+      const altura = canvas.height;
+
+      let teclas = {};
+      let jogoAtual = null;
+      let ultimoTimestamp = 0;
+      let animFrameId = null;
+
+      // Recordes salvos no localStorage
+      const recordes = {
+        blocos: parseInt(localStorage.getItem('recorde_blocos')) || 0,
+        nave: parseInt(localStorage.getItem('recorde_nave')) || 0
+      };
+
+      // Setup áudio (com tratamento para suspensão)
+      let audioCtx;
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContext();
+      } catch {}
+
+      function playSound(freq, duration = 0.1, volume = 0.2) {
+        if (!audioCtx) return;
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        oscillator.type = 'square';
+        oscillator.frequency.value = freq;
+        gainNode.gain.value = volume;
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + duration);
+      }
+
+      // Função genérica para checar colisão AABB
+      function colide(a, b, aw = 0, ah = 0, bw = aw, bh = ah) {
+        return a.x < b.x + bw &&
+               a.x + aw > b.x &&
+               a.y < b.y + bh &&
+               a.y + ah > b.y;
+      }
+
+      // Função para atualizar display de pontos e recordes
+      function atualizarHUD(pontos, recorde) {
+        hud.textContent = `Pontos: ${pontos}`;
+        recordeDiv.textContent = `Recorde: ${recorde}`;
+      }
+
+      // Define os dois jogos com suas lógicas
+      const jogos = {
+        blocos: {
+          nome: 'Desvie dos Blocos',
+          jogador: {},
+          inimigos: [],
+          pontos: 0,
+          intervalo: 800,
+          velocidade: 150,
+          tempo: 0,
+          resetar() {
+            this.jogador = { x: largura / 2 - 25, y: altura - 70, largura: 50, altura: 50, dx: 0, velocidade: 300 };
+            this.inimigos = [];
+            this.pontos = 0;
+            this.intervalo = 800;
+            this.velocidade = 150;
+            this.tempo = 0;
+            atualizarHUD(0, recordes.blocos);
+          },
+          atualizar(delta) {
+            this.jogador.dx = (teclas['ArrowLeft'] || teclas['a']) ? -this.jogador.velocidade :
+                              (teclas['ArrowRight'] || teclas['d']) ? this.jogador.velocidade : 0;
+            this.jogador.x += this.jogador.dx * delta;
+            this.jogador.x = Math.max(0, Math.min(largura - this.jogador.largura, this.jogador.x));
+
+            this.tempo += delta * 1000;
+            if (this.tempo > this.intervalo) {
+              this.inimigos.push({ x: Math.random() * (largura - 50), y: -50 });
+              this.tempo = 0;
+            }
+
+            for (let i = this.inimigos.length - 1; i >= 0; i--) {
+              const e = this.inimigos[i];
+              e.y += this.velocidade * delta;
+
+              if (colide(this.jogador, e, 50, 50)) return fimDeJogo();
+
+              if (e.y > altura) {
+                this.inimigos.splice(i, 1);
+                this.pontos++;
+                atualizarHUD(this.pontos, recordes.blocos);
+                playSound(880, 0.05);
+                if (this.pontos % 5 === 0 && this.intervalo > 300) {
+                  this.intervalo -= 50;
+                  this.velocidade += 20;
+                }
+              }
+            }
+          },
+          desenhar() {
+            ctx.fillStyle = '#00d4ff';
+            ctx.fillRect(this.jogador.x, this.jogador.y, this.jogador.largura, this.jogador.altura);
+            ctx.fillStyle = 'red';
+            this.inimigos.forEach(e => ctx.fillRect(e.x, e.y, 50, 50));
+          },
+          getPontos() { return this.pontos; },
+          getRecordeKey() { return 'blocos'; }
+        },
+        nave: {
+          nome: 'Jogo da Nave',
+          nave: {},
+          tiros: [],
+          inimigos: [],
+          pontos: 0,
+          tempo: 0,
+          intervalo: 1000,
+          resetar() {
+            this.nave = { x: largura / 2 - 20, y: altura - 60, largura: 40, altura: 40, velocidade: 300 };
+            this.tiros = [];
+            this.inimigos = [];
+            this.pontos = 0;
+            this.tempo = 0;
+            this.intervalo = 1000;
+            atualizarHUD(0, recordes.nave);
+          },
+          atualizar(delta) {
+            if (teclas['ArrowLeft'] || teclas['a']) this.nave.x -= this.nave.velocidade * delta;
+            if (teclas['ArrowRight'] || teclas['d']) this.nave.x += this.nave.velocidade * delta;
+            this.nave.x = Math.max(0, Math.min(largura - this.nave.largura, this.nave.x));
+
+            this.tempo += delta * 1000;
+            if (this.tempo > this.intervalo) {
+              this.inimigos.push({ x: Math.random() * (largura - 30), y: -30 });
+              this.tempo = 0;
+            }
+
+            this.tiros.forEach(t => t.y -= 400 * delta);
+            this.tiros = this.tiros.filter(t => t.y > -10);
+
+            for (let i = this.inimigos.length - 1; i >= 0; i--) {
+              const inimigo = this.inimigos[i];
+              inimigo.y += 150 * delta;
+
+              // Checar colisão tiros x inimigos
+              for (let j = 0; j < this.tiros.length; j++) {
+                const tiro = this.tiros[j];
+                if (colide(tiro, inimigo, 5, 10, 30, 30)) {
+                  this.tiros.splice(j, 1);
+                  this.inimigos.splice(i, 1);
+                  this.pontos++;
+                  atualizarHUD(this.pontos, recordes.nave);
+                  playSound(600, 0.05);
+                  break;
+                }
+              }
+
+              if (colide(this.nave, inimigo, this.nave.largura, this.nave.altura, 30, 30)) return fimDeJogo();
+            }
+          },
+          desenhar() {
+            ctx.fillStyle = '#0ff';
+            ctx.fillRect(this.nave.x, this.nave.y, this.nave.largura, this.nave.altura);
+            ctx.fillStyle = '#fff';
+            this.tiros.forEach(t => ctx.fillRect(t.x, t.y, 5, 10));
+            ctx.fillStyle = 'orange';
+            this.inimigos.forEach(i => ctx.fillRect(i.x, i.y, 30, 30));
+          },
+          getPontos() { return this.pontos; },
+          getRecordeKey() { return 'nave'; }
+        }
+      };
+
+      // Função para iniciar o jogo selecionado
+      function iniciarJogo(nome) {
+        jogoAtual = jogos[nome];
+        jogoAtual.resetar();
+        menu.style.display = 'none';
+        jogoAtualSpan.textContent = `🕹️ Jogo: ${jogoAtual.nome}`;
+        ultimoTimestamp = 0;
+        animFrameId = requestAnimationFrame(loop);
+      }
+
+      // Função que finaliza o jogo, atualiza recorde e exibe menu
+      function fimDeJogo() {
+        cancelAnimationFrame(animFrameId);
+        const key = jogoAtual.getRecordeKey();
+        const pontos = jogoAtual.getPontos();
+        if (pontos > recordes[key]) {
+          recordes[key] = pontos;
+          localStorage.setItem(`recorde_${key}`, pontos);
+        }
+        atualizarHUD(pontos, recordes[key]);
+        setTimeout(() => {
+          menu.style.display = 'flex';
+          jogoAtualSpan.textContent = '';
+          jogoAtual = null;
+        }, 500);
+      }
+
+      // Loop principal do jogo
+      function loop(timestamp) {
+        if (!jogoAtual) return;
+        const delta = (timestamp - ultimoTimestamp) / 1000 || 0;
+        ultimoTimestamp = timestamp;
+
+        ctx.clearRect(0, 0, largura, altura);
+        jogoAtual.atualizar(delta);
+        jogoAtual.desenhar();
+
+        animFrameId = requestAnimationFrame(loop);
+      }
+
+      // Eventos de teclado
+      window.addEventListener('keydown', e => {
+        if (!teclas[e.key]) {
+          teclas[e.key] = true;
+        }
+        if (audioCtx?.state === 'suspended') audioCtx.resume();
+
+        // Disparo de tiros no jogo da nave
+        if ((e.key === ' ' || e.key === 'Spacebar') && jogoAtual === jogos.nave) {
+          e.preventDefault();
+          jogoAtual.tiros.push({
+            x: jogoAtual.nave.x + jogoAtual.nave.largura / 2 - 2.5,
+            y: jogoAtual.nave.y
+          });
+          playSound(1200, 0.05);
+        }
+      });
+      window.addEventListener('keyup', e => teclas[e.key] = false);
+
+      // Botões do menu para iniciar jogo
+      buttons.forEach(btn => {
+        btn.addEventListener('click', () => iniciarJogo(btn.dataset.jogo));
+      });
+
+    })();
+  </script>
+</body>
+</html>
